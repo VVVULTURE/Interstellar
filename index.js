@@ -85,6 +85,48 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// --- CORS Proxy Route ---
+app.get("/cors", async (req, res) => {
+  const target = req.query.url;
+  if (!target) {
+    return res.status(400).json({ error: "Missing url query param" });
+  }
+
+  try {
+    const upstream = await fetch(target, {
+      method: "GET",
+      headers: { "User-Agent": "HolyCassyProxy/1.0" },
+    });
+
+    // Forward headers (skip unsafe ones)
+    upstream.headers.forEach((value, key) => {
+      if (!["content-encoding", "transfer-encoding"].includes(key)) {
+        res.setHeader(key, value);
+      }
+    });
+
+    // ✅ Add CORS headers
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    res.status(upstream.status);
+    upstream.body.pipe(res);
+  } catch (err) {
+    console.error("CORS Proxy failed:", err);
+    res.status(500).json({ error: "Proxy fetch failed" });
+  }
+});
+
+// Handle preflight
+app.options("/cors", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.sendStatus(204);
+});
+
+
 /* if (process.env.MASQR === "true") {
   console.log(chalk.green("Masqr is enabled"));
   setupMasqr(app);
